@@ -51,7 +51,8 @@ You can delete `/tmp/claude-shrunk` at any time.
 - macOS only (see above).
 - svg and pdf files are not shrunk.
 - If the resize fails for any reason, Claude reads the original.
-- Permissions are checked on your original file first. The mod shrinks only when your rules allow that file outright. If your rules would deny it or ask you first, the mod steps aside and Claude reads the original in the usual way, so you keep your protection but get no saving.
+- The mod respects your permission settings. It shrinks an image only when your settings let Claude read both the original file and the smaller copy in `/tmp/claude-shrunk` without asking you. If either would be blocked or would ask you first, the mod steps aside and Claude reads the original in the usual way, so you keep your protection but get no saving.
+- If you find it never shrinks anything, Claude is probably not allowed to read `/tmp/claude-shrunk` on its own. To allow it, add this line to the `permissions.allow` list in your Claude Code settings file (`~/.claude/settings.json`): `"Read(//tmp/claude-shrunk/**)"`.
 
 ## License
 
