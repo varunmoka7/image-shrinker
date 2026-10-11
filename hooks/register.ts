@@ -32,6 +32,9 @@ async function shrink($: EngineInterface, path: string) {
   // Every read gets its own copy, so two reads of one path (or two sessions) never share a file.
   const unique = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
   const copy = `${DIR}/${unique}${path.replace(/[^A-Za-z0-9.]+/g, '_').slice(-80)}.png`
+  // The copy is outside the project, so check it would be read without a prompt too; otherwise every screenshot would ask.
+  const copyVerdict = await $.tool.check({ tool: 'Read', input: { file_path: copy } }).catch(() => undefined)
+  if (copyVerdict?.decision !== 'allow') return undefined
   // Round down so the final size is never over a cap.
   const width = Math.max(1, Math.floor(size.width * scale))
   const height = Math.max(1, Math.floor(size.height * scale))

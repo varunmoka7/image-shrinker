@@ -5,11 +5,11 @@ const OK = { exitCode: 0, stderr: '', signal: null, timedOut: false }
 const START = { cwd: '/', surface: 'terminal', isInteractive: true } as const
 
 // Stands for sips and the Read tool: the [width, height] by path, what ran, and which path the tool was given.
-const host = (on: On, sizes: Record<string, [number, number]>, resizeFails = false, noSips = false, decision: 'allow' | 'ask' | 'deny' = 'allow') => {
+const host = (on: On, sizes: Record<string, [number, number]>, resizeFails = false, noSips = false, decision: 'allow' | 'ask' | 'deny' = 'allow', copyDecision: 'allow' | 'ask' | 'deny' = 'allow') => {
   const ran: string[][] = []
   const read: string[] = []
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('tool.check', { tool: 'Read' }, () => ({ decision }))
+  on('tool.check', { tool: 'Read' }, (_, e) => ({ decision: (e.input as { file_path: string }).file_path.startsWith('/tmp/claude-shrunk/') ? copyDecision : decision }))
   on('process.run', (_, e) => {
     ran.push([...e.argv])
     if (noSips && e.argv[0] === 'sips') throw new Error('sips: command not found')
@@ -138,4 +138,14 @@ test('the folder is private, the copy is private, and each read gets its own cop
     expect(seen.ran).toContainEqual(['chmod', '600', copy])
     expect(seen.ran).toContainEqual(['rm', '-f', copy])
   }
+})
+
+test('when the copy path would ask for permission, the original is read and nothing is resized', async ($, on) => {
+  const seen = host(on, { '/p/s.png': [2400, 1500] }, false, false, 'allow', 'ask')
+  await $.session.start(START)
+
+  await readImage($, '/p/s.png')
+  expect(seen.read).toEqual(['/p/s.png'])
+  expect(resized(seen.ran)).toBeUndefined()
+  expect(seen.ran.some(a => a[0] === 'mkdir')).toBe(false)
 })
