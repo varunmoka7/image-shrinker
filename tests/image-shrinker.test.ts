@@ -149,3 +149,13 @@ test('when the copy path would ask for permission, the original is read and noth
   expect(resized(seen.ran)).toBeUndefined()
   expect(seen.ran.some(a => a[0] === 'mkdir')).toBe(false)
 })
+
+test('a jpeg stays a jpeg', async ($, on) => {
+  const seen = host(on, { '/p/photo.JPG': [2400, 1500] })
+  await $.session.start(START)
+
+  await readImage($, '/p/photo.JPG')
+  expect(seen.read[0]).toMatch(/\.jpg$/)
+  const made = seen.ran.find(a => a[1] === '-z')!
+  expect(made[made.indexOf('format') + 1]).toBe('jpeg')
+})

@@ -11,6 +11,8 @@ const DIR = '/tmp/claude-shrunk'
 const IMAGE = /\.(png|jpe?g|gif|tiff?|bmp|webp|heic|heif)$/i
 // The API cannot show these, so they are always converted, whatever their size.
 const CONVERT = /\.(heic|heif)$/i
+// A JPEG stays a JPEG: PNG would make a photo several times bigger.
+const JPEG = /\.jpe?g$/i
 
 // The pixel size of an image, or undefined when sips cannot read it or is missing (sips ships only with macOS).
 async function sizeOf($: EngineInterface, path: string) {
@@ -31,7 +33,8 @@ async function shrink($: EngineInterface, path: string) {
 
   // Every read gets its own copy, so two reads of one path (or two sessions) never share a file.
   const unique = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
-  const copy = `${DIR}/${unique}${path.replace(/[^A-Za-z0-9.]+/g, '_').slice(-80)}.png`
+  const format = JPEG.test(path) ? 'jpeg' : 'png'
+  const copy = `${DIR}/${unique}${path.replace(/[^A-Za-z0-9.]+/g, '_').slice(-80)}.${format === 'jpeg' ? 'jpg' : 'png'}`
   // The copy is outside the project, so check it would be read without a prompt too; otherwise every screenshot would ask.
   const copyVerdict = await $.tool.check({ tool: 'Read', input: { file_path: copy } }).catch(() => undefined)
   if (copyVerdict?.decision !== 'allow') return undefined
@@ -41,7 +44,7 @@ async function shrink($: EngineInterface, path: string) {
   // Folder 0700 and copy 0600: other users on the Mac cannot read them. chmod fails on a folder someone else made.
   const dir = await $.process.run(['mkdir', '-p', '-m', '700', DIR])
   if (dir.exitCode !== 0 || (await $.process.run(['chmod', '700', DIR])).exitCode !== 0) return undefined
-  const made = await $.process.run(['sips', '-z', String(height), String(width), path, '-s', 'format', 'png', '--out', copy])
+  const made = await $.process.run(['sips', '-z', String(height), String(width), path, '-s', 'format', format, '--out', copy])
   if (made.exitCode === 0 && (await $.process.run(['chmod', '600', copy])).exitCode === 0) return { copy, size, scale, width, height }
   await $.process.run(['rm', '-f', copy])
 
