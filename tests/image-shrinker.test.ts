@@ -5,10 +5,11 @@ const OK = { exitCode: 0, stderr: '', signal: null, timedOut: false }
 const START = { cwd: '/', surface: 'terminal', isInteractive: true } as const
 
 // Stands for sips and the Read tool: the [width, height] by path, what ran, and which path the tool was given.
-const host = (on: On, sizes: Record<string, [number, number]>, resizeFails = false, noSips = false) => {
+const host = (on: On, sizes: Record<string, [number, number]>, resizeFails = false, noSips = false, decision: 'allow' | 'ask' | 'deny' = 'allow') => {
   const ran: string[][] = []
   const read: string[] = []
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('tool.check', { tool: 'Read' }, () => ({ decision }))
   on('process.run', (_, e) => {
     ran.push([...e.argv])
     if (noSips && e.argv[0] === 'sips') throw new Error('sips: command not found')
@@ -31,8 +32,8 @@ const host = (on: On, sizes: Record<string, [number, number]>, resizeFails = fal
 
 type Engine = Parameters<Parameters<typeof test>[1]>[0]
 const readImage = ($: Engine, file_path: string, extra = {}) => $.tool.call({ tool: 'Read', file_path, ...extra } as never) as Promise<any>
-// Drops the 8-digit hash that starts every copy name.
-const unhash = (p: string) => p.replace(/(claude-shrunk\/)[0-9a-f]{8}/, '$1')
+// Drops the random part that starts every copy name.
+const unique = (p: string) => p.replace(/(claude-shrunk\/)[0-9a-z]+(?=_)/, '$1')
 // The -z height width arguments of the resize, if one ran.
 const resized = (ran: string[][]) => ran.find(a => a[1] === '-z')?.slice(2, 4)
 
@@ -41,14 +42,15 @@ test('reads a copy of a wide image and tells the model the scale', async ($, on)
   await $.session.start(START)
 
   const out = await readImage($, '/p/s.png')
-  expect(seen.read.map(unhash)).toEqual(['/tmp/claude-shrunk/_p_s.png'])
+  expect(seen.read.map(unique)).toEqual(['/tmp/claude-shrunk/_p_s.png.png'])
   expect(resized(seen.ran)).toEqual(['750', '1200'])
   expect(out.context.join(' ')).toContain('2.00')
   expect(out.context.join(' ')).toContain('offset: 1')
+  expect(out.context.join(' ')).toContain('original image pixels')
 })
 
 test('an image within both caps, a non-image and an unreadable file are read as they are', async ($, on) => {
-  const seen = host(on, { '/p/small.png': [1200, 1568] })
+  const seen = host(on, { '/p/small.png': [1000, 1000] })
   await $.session.start(START)
 
   await readImage($, '/p/small.png')
@@ -89,7 +91,7 @@ test('webp is shrunk and heic is converted to png even when small', async ($, on
 
   await readImage($, '/p/w.webp')
   const out = await readImage($, '/p/h.heic')
-  expect(seen.read.map(unhash)).toEqual(['/tmp/claude-shrunk/_p_w.webp.png', '/tmp/claude-shrunk/_p_h.heic.png'])
+  expect(seen.read.map(unique)).toEqual(['/tmp/claude-shrunk/_p_w.webp.png', '/tmp/claude-shrunk/_p_h.heic.png'])
   expect(seen.ran.filter(a => a[1] === '-z').map(a => a.slice(2, 4))).toEqual([['750', '1200'], ['400', '600']])
   expect(out.context ?? []).toEqual([])
 })
@@ -102,11 +104,38 @@ test('without sips (Linux, Windows) every image is read as it is', async ($, on)
   expect(seen.read).toEqual(['/p/s.png'])
 })
 
-test('paths that differ only in / versus _ get different copies', async ($, on) => {
-  const seen = host(on, { '/a/b_c.png': [2400, 1500], '/a_b/c.png': [2400, 1500] })
+test('the shrunk copy stays under about 1.15 megapixels, so the API does not resize it again', async ($, on) => {
+  const seen = host(on, { '/p/s.png': [1200, 1568] })
   await $.session.start(START)
 
-  await readImage($, '/a/b_c.png')
-  await readImage($, '/a_b/c.png')
+  const out = await readImage($, '/p/s.png')
+  const [h, w] = resized(seen.ran)!.map(Number)
+  expect(w! * h!).toBeLessThanOrEqual(1_150_000)
+  expect(out.context.join(' ')).toContain('1.28')
+})
+
+for (const decision of ['deny', 'ask'] as const) {
+  test(`a ${decision} on the original path means no copy is made`, async ($, on) => {
+    const seen = host(on, { '/p/s.png': [2400, 1500] }, false, false, decision)
+    await $.session.start(START)
+
+    await readImage($, '/p/s.png')
+    expect(seen.read).toEqual(['/p/s.png'])
+    expect(seen.ran).toEqual([])
+  })
+}
+
+test('the folder is private, the copy is private, and each read gets its own copy that is removed afterwards', async ($, on) => {
+  const seen = host(on, { '/a/b.png': [2400, 1500] })
+  await $.session.start(START)
+
+  await Promise.all([readImage($, '/a/b.png'), readImage($, '/a/b.png')])
+  expect(seen.read.length).toBe(2)
   expect(new Set(seen.read).size).toBe(2)
+  expect(seen.ran).toContainEqual(['mkdir', '-p', '-m', '700', '/tmp/claude-shrunk'])
+  expect(seen.ran).toContainEqual(['chmod', '700', '/tmp/claude-shrunk'])
+  for (const copy of seen.read) {
+    expect(seen.ran).toContainEqual(['chmod', '600', copy])
+    expect(seen.ran).toContainEqual(['rm', '-f', copy])
+  }
 })

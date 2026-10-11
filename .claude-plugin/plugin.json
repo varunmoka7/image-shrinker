@@ -1,6 +1,6 @@
 {
   "name": "image-shrinker",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Shrinks big screenshots before Claude reads them, so long sessions last longer, and tells Claude the scale so clicks still land in the right place.",
   "author": { "name": "Varun Moka", "url": "https://github.com/varunmoka7" },
   "license": "MIT",
