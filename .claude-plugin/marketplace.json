@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "image-shrinker",
+  "description": "Claude Code mod that shrinks big screenshots before Claude reads them.",
+  "owner": { "name": "Varun Moka", "url": "https://github.com/varunmoka7" },
+  "plugins": [
+    {
+      "name": "image-shrinker",
+      "description": "Shrinks big screenshots before Claude reads them, so long sessions last longer, and tells Claude the scale so clicks still land in the right place.",
+      "author": { "name": "Varun Moka", "url": "https://github.com/varunmoka7" },
+      "source": "./",
+      "homepage": "https://github.com/varunmoka7/image-shrinker",
+      "category": "productivity",
+      "tags": ["claude-code-mod", "screenshots", "images"]
+    }
+  ]
+}
